@@ -11,7 +11,7 @@ def build_yolo():
 
 def train_yolo(
     data_yaml="dataset/furniture_detection/data.yaml",
-    epochs=20
+    epochs=5
 ):
 
     model = build_yolo()
@@ -19,7 +19,7 @@ def train_yolo(
     model.train(
         data=data_yaml,
         epochs=epochs,
-        imgsz=416,
+        imgsz=320,
         batch=16,
         project="runs",
         name="furniture_detector"

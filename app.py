@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 import plotly.express as px
+from ultralytics import YOLO
 
 # ==================================================
 # CONFIG
@@ -52,13 +53,17 @@ def load_models():
         "models/mobilenet_model.keras"
     )
 
-    return cnn, mobilenet
+    yolo = YOLO(
+        "runs/detect/runs/furniture_detector-2/weights/best.pt"
+    )
+
+    return cnn, mobilenet, yolo
 
 
-cnn_model, mobilenet_model = load_models()
+cnn_model, mobilenet_model, yolo_model = load_models()
 
 # ==================================================
-# STYLE
+# STYLE (IKEA INSPIRED)
 # ==================================================
 
 st.markdown("""
@@ -68,24 +73,59 @@ st.markdown("""
     padding-top:2rem;
 }
 
+/* HEADER */
 .header{
-    background: linear-gradient(
-        90deg,
-        #1F3A5F,
-        #2E5EAA
-    );
-
+    background: linear-gradient(90deg, #1F3A5F, #2E5EAA);
     color:white;
-    padding:20px;
+    padding:18px;
     border-radius:12px;
     text-align:center;
     margin-bottom:20px;
+    position: relative;
 }
 
+/* IKEA BADGE */
+.ikea-logo{
+    position:absolute;
+    left:20px;
+    top:36px;
+    background:#FFCC00;
+    color:#003399;
+    font-weight:bold;
+    padding:6px 12px;
+    border-radius:6px;
+    font-size:26px;
+}
+
+/* IKEA ACCENTS */
+h1, h2, h3 {
+    color:#003399;
+}
+
+a {
+    color:#FFCC00; !important;
+    text-decoration: underline;
+}
+
+a:hover {
+    color:#FFCC00 !important;
+}
+
+/* CARDS */
 .chart-card{
     background:white;
     border-radius:10px;
-    padding:10px;
+    padding:12px;
+}
+
+/* MORE SPACE BETWEEN COLUMNS */
+div[data-testid="column"] {
+    padding: 12px;
+}
+
+/* SMALLER PLOTLY GRAPHS */
+.js-plotly-plot .plotly {
+    height: 280px !important;
 }
 
 </style>
@@ -97,7 +137,8 @@ st.markdown("""
 
 st.markdown("""
 <div class="header">
-<h1>IKEA Furniture Classification</h1>
+    <div class="ikea-logo">IKEA</div>
+    <h1>Furniture Classification and Detection</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -117,8 +158,6 @@ tab1, tab2, tab3 = st.tabs([
 
 with tab1:
 
-    st.subheader("Furniture Classification")
-
     uploaded_file = st.file_uploader(
         "Upload Furniture Image",
         type=["jpg", "jpeg", "png"]
@@ -133,81 +172,44 @@ with tab1:
         img_array = np.array(img)
 
         if len(img_array.shape) == 2:
-            img_array = np.stack(
-                [img_array] * 3,
-                axis=-1
-            )
+            img_array = np.stack([img_array] * 3, axis=-1)
 
         if img_array.shape[-1] == 4:
             img_array = img_array[:, :, :3]
 
-        img_array = img_array.astype(
-            "float32"
-        ) / 255.0
+        img_array = img_array.astype("float32") / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
 
-        img_array = np.expand_dims(
-            img_array,
-            axis=0
-        )
+        cnn_pred = cnn_model.predict(img_array, verbose=0)
+        mobile_pred = mobilenet_model.predict(img_array, verbose=0)
 
-        cnn_pred = cnn_model.predict(
-            img_array,
-            verbose=0
-        )
+        yolo_results = yolo_model.predict(image, verbose=False)
+        annotated_image = yolo_results[0].plot()
 
-        mobile_pred = mobilenet_model.predict(
-            img_array,
-            verbose=0
-        )
+        detected_objects = []
 
-        pred_cnn = CLASS_NAMES[
-            np.argmax(cnn_pred)
-        ]
+        for box in yolo_results[0].boxes:
+            cls = int(box.cls)
+            detected_objects.append(yolo_results[0].names[cls])
 
-        pred_mobile = CLASS_NAMES[
-            np.argmax(mobile_pred)
-        ]
+        pred_cnn = CLASS_NAMES[np.argmax(cnn_pred)]
+        pred_mobile = CLASS_NAMES[np.argmax(mobile_pred)]
 
         conf_cnn = np.max(cnn_pred)
-
         conf_mobile = np.max(mobile_pred)
 
-        col1, col2, col3 = st.columns(3)
+        # BETTER SPACING (4 columns)
+        col1, col2, col3, col4 = st.columns([1.7, 1.5, 1.5, 1.4])
 
         with col1:
-
-            st.image(
-                image,
-                use_container_width=True
-            )
+            st.image(image, use_container_width=True)
 
         with col2:
-
             st.markdown("### Custom CNN")
 
-            st.write(
-                f"Prediction: **{pred_cnn}**"
-            )
+            st.write(f"Prediction: **{pred_cnn}**")
+            st.write(f"Confidence: **{conf_cnn:.2%}**")
 
-            st.write(
-                f"Confidence: **{conf_cnn:.2%}**"
-            )
-
-        with col3:
-
-            st.markdown("### MobileNetV2")
-
-            st.write(
-                f"Prediction: **{pred_mobile}**"
-            )
-
-            st.write(
-                f"Confidence: **{conf_mobile:.2%}**"
-            )
-            
-            
-        col1, col2 = st.columns(2)
-        with col1:
             prob_df = pd.DataFrame({
                 "Category": CLASS_NAMES,
                 "Probability": cnn_pred[0]
@@ -217,15 +219,20 @@ with tab1:
                 prob_df,
                 x="Category",
                 y="Probability",
-                title="Custom CNN Probabilities"
             )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            fig.update_traces(marker_line_width=0.5)
 
-        with col2:
+            fig.update_layout(height=280)
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col3:
+            st.markdown("### MobileNetV2")
+
+            st.write(f"Prediction: **{pred_mobile}**")
+            st.write(f"Confidence: **{conf_mobile:.2%}**")
+
             prob_df = pd.DataFrame({
                 "Category": CLASS_NAMES,
                 "Probability": mobile_pred[0]
@@ -235,16 +242,22 @@ with tab1:
                 prob_df,
                 x="Category",
                 y="Probability",
-                title="MobileNetV2 Probabilities"
             )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-        
+            fig.update_traces(marker_line_width=0.5)
+            fig.update_layout(height=280)
 
+            st.plotly_chart(fig, use_container_width=True)
 
+        with col4:
+            st.markdown("### YOLOv8 Detection")
+
+            if detected_objects:
+                st.write(f"Detected: {', '.join(sorted(set(detected_objects)))}")
+            else:
+                st.write("No objects detected")
+            
+            st.image(annotated_image, use_container_width=True)
 
 # ==================================================
 # TAB 2 : DATASET
@@ -258,16 +271,8 @@ with tab2:
 
     with col1:
 
-        counts = (
-            df["category"]
-            .value_counts()
-            .reset_index()
-        )
-
-        counts.columns = [
-            "Category",
-            "Count"
-        ]
+        counts = df["category"].value_counts().reset_index()
+        counts.columns = ["Category", "Count"]
 
         fig = px.bar(
             counts,
@@ -276,10 +281,7 @@ with tab2:
             title="Category Distribution"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
     with col2:
 
@@ -290,20 +292,13 @@ with tab2:
             title="Price Distribution"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
 
-        avg_price = (
-            df.groupby("category")["price"]
-            .mean()
-            .reset_index()
-        )
+        avg_price = df.groupby("category")["price"].mean().reset_index()
 
         fig = px.bar(
             avg_price,
@@ -312,23 +307,13 @@ with tab2:
             title="Average Price by Category"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        fig.update_layout(height=260)
+        st.plotly_chart(fig, use_container_width=True)
 
     with col2:
 
-        availability = (
-            df["sellable_online"]
-            .value_counts()
-            .reset_index()
-        )
-
-        availability.columns = [
-            "Online",
-            "Count"
-        ]
+        availability = df["sellable_online"].value_counts().reset_index()
+        availability.columns = ["Online", "Count"]
 
         fig = px.pie(
             availability,
@@ -337,15 +322,9 @@ with tab2:
             title="Online Availability"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(
-        df.head(20),
-        use_container_width=True
-    )
+    st.dataframe(df.head(20), use_container_width=True)
 
 # ==================================================
 # TAB 3 : MODELS
@@ -356,18 +335,8 @@ with tab3:
     st.subheader("Model Comparison")
 
     comparison = pd.DataFrame({
-
-        "Model": [
-            "Logistic Regression",
-            "Custom CNN",
-            "MobileNetV2"
-        ],
-
-        "Accuracy": [
-            0.59,
-            0.42,
-            0.62
-        ]
+        "Model": ["Logistic Regression", "Custom CNN", "MobileNetV2"],
+        "Accuracy": [0.59, 0.42, 0.62]
     })
 
     fig = px.bar(
@@ -378,34 +347,15 @@ with tab3:
         title="Model Accuracy Comparison"
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    fig.update_traces(marker_line_width=0.5)
+    fig.update_layout(height=280)
+
+    st.plotly_chart(fig, use_container_width=True)
 
     comparison_table = pd.DataFrame({
-
-        "Metric": [
-            "Accuracy",
-            "Validation Accuracy",
-            "Model Type"
-        ],
-
-        "Custom CNN": [
-            "0.42",
-            "0.42",
-            "CNN From Scratch"
-        ],
-
-        "MobileNetV2": [
-            "0.62",
-            "0.62",
-            "Transfer Learning"
-        ]
+        "Metric": ["Accuracy", "Validation Accuracy", "Model Type"],
+        "Custom CNN": ["0.42", "0.42", "CNN From Scratch"],
+        "MobileNetV2": ["0.62", "0.62", "Transfer Learning"]
     })
 
-    st.dataframe(
-        comparison_table,
-        use_container_width=True
-    )
-
+    st.dataframe(comparison_table, use_container_width=True)

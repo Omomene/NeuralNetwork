@@ -7,3 +7,5 @@ models/*.h5
 models/
 /dataset/furniture_detection
 *.zip
+/runs
+/yolov8n.pt
