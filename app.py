@@ -62,6 +62,34 @@ def load_models():
 
 cnn_model, mobilenet_model, yolo_model = load_models()
 
+def style_ikea_chart(fig):
+
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(
+            family="Arial",
+            size=15,
+            color=IKEA_DARK_BLUE
+        ),
+        margin=dict(
+            l=20,
+            r=20,
+            t=40,
+            b=20
+        ),
+        xaxis=dict(
+            showgrid=False,
+            title=None
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor="#EAEAEA",
+            zeroline=False
+        )
+    )
+
+    return fig
 # ==================================================
 # STYLE (IKEA INSPIRED)
 # ==================================================
@@ -77,10 +105,10 @@ st.markdown("""
 .header{
     background: linear-gradient(90deg, #1F3A5F, #2E5EAA);
     color:white;
-    padding:18px;
+    padding:16px;
     border-radius:12px;
     text-align:center;
-    margin-bottom:20px;
+    margin-bottom:10px;
     position: relative;
 }
 
@@ -120,12 +148,34 @@ a:hover {
 
 /* MORE SPACE BETWEEN COLUMNS */
 div[data-testid="column"] {
-    padding: 12px;
+    padding: 14px;
 }
 
 /* SMALLER PLOTLY GRAPHS */
 .js-plotly-plot .plotly {
     height: 280px !important;
+}
+
+/* Tabs */
+button[data-baseweb="tab"] {
+    font-size: 22px !important;
+    font-weight: bold !important;
+}
+
+/* Upload Furniture Image */
+[data-testid="stFileUploader"] label {
+    font-size: 22px !important;
+    font-weight: bold !important;
+}
+
+/* Custom CNN / MobileNetV2 / YOLO titles */
+h3 {
+    font-size: 24px !important;
+}
+
+/* Prediction and confidence text */
+p {
+    font-size: 18px !important;
 }
 
 </style>
@@ -158,10 +208,13 @@ tab1, tab2, tab3 = st.tabs([
 
 with tab1:
 
-    uploaded_file = st.file_uploader(
+    st.file_uploader(
         "Upload Furniture Image",
-        type=["jpg", "jpeg", "png"]
+        type=["jpg", "jpeg", "png"],
+        key="upload"
     )
+
+    uploaded_file = st.session_state.get("upload")
 
     if uploaded_file is not None:
 
@@ -172,25 +225,47 @@ with tab1:
         img_array = np.array(img)
 
         if len(img_array.shape) == 2:
-            img_array = np.stack([img_array] * 3, axis=-1)
+            img_array = np.stack(
+                [img_array] * 3,
+                axis=-1
+            )
 
         if img_array.shape[-1] == 4:
             img_array = img_array[:, :, :3]
 
         img_array = img_array.astype("float32") / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
 
-        cnn_pred = cnn_model.predict(img_array, verbose=0)
-        mobile_pred = mobilenet_model.predict(img_array, verbose=0)
+        img_array = np.expand_dims(
+            img_array,
+            axis=0
+        )
 
-        yolo_results = yolo_model.predict(image, verbose=False)
+        cnn_pred = cnn_model.predict(
+            img_array,
+            verbose=0
+        )
+
+        mobile_pred = mobilenet_model.predict(
+            img_array,
+            verbose=0
+        )
+
+        yolo_results = yolo_model.predict(
+            image,
+            verbose=False
+        )
+
         annotated_image = yolo_results[0].plot()
 
         detected_objects = []
 
         for box in yolo_results[0].boxes:
+
             cls = int(box.cls)
-            detected_objects.append(yolo_results[0].names[cls])
+
+            detected_objects.append(
+                yolo_results[0].names[cls]
+            )
 
         pred_cnn = CLASS_NAMES[np.argmax(cnn_pred)]
         pred_mobile = CLASS_NAMES[np.argmax(mobile_pred)]
@@ -198,17 +273,48 @@ with tab1:
         conf_cnn = np.max(cnn_pred)
         conf_mobile = np.max(mobile_pred)
 
-        # BETTER SPACING (4 columns)
-        col1, col2, col3, col4 = st.columns([1.7, 1.5, 1.5, 1.4])
+        col1, col2, col3, col4 = st.columns(
+            [1.8, 1.4, 1.4, 1.4]
+        )
+
+        # ==========================
+        # IMAGE
+        # ==========================
 
         with col1:
-            st.image(image, use_container_width=True)
+
+            st.markdown("### Uploaded Image")
+
+            st.image(
+                image,
+                use_container_width=True
+            )
+
+        # ==========================
+        # CUSTOM CNN
+        # ==========================
 
         with col2:
+
             st.markdown("### Custom CNN")
 
-            st.write(f"Prediction: **{pred_cnn}**")
-            st.write(f"Confidence: **{conf_cnn:.2%}**")
+            st.markdown(
+                f"""
+                <div style="
+                    background:#F8F9FB;
+                    padding:10px;
+                    border-left:5px solid #FFCC00;
+                    border-radius:8px;
+                    margin-bottom:10px;">
+                    <b>Prediction:</b> {pred_cnn}<br>
+                    <b>Confidence:</b>
+                    <span style="color:#0058A3;">
+                    {conf_cnn:.2%}
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             prob_df = pd.DataFrame({
                 "Category": CLASS_NAMES,
@@ -219,19 +325,65 @@ with tab1:
                 prob_df,
                 x="Category",
                 y="Probability",
+                color="Probability",
+                color_continuous_scale=[
+                    "#FFCC00",
+                    "#0058A3"
+                ]
             )
 
-            fig.update_traces(marker_line_width=0.5)
+            fig.update_coloraxes(
+                showscale=False
+            )
 
-            fig.update_layout(height=280)
+            fig.update_layout(
+                height=260,
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                font=dict(
+                    size=14,
+                    color="#003399"
+                ),
+                margin=dict(
+                    l=10,
+                    r=10,
+                    t=20,
+                    b=10
+                ),
+                xaxis_title="",
+                yaxis_title=""
+            )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        # ==========================
+        # MOBILENET
+        # ==========================
 
         with col3:
+
             st.markdown("### MobileNetV2")
 
-            st.write(f"Prediction: **{pred_mobile}**")
-            st.write(f"Confidence: **{conf_mobile:.2%}**")
+            st.markdown(
+                f"""
+                <div style="
+                    background:#F8F9FB;
+                    padding:10px;
+                    border-left:5px solid #FFCC00;
+                    border-radius:8px;
+                    margin-bottom:10px;">
+                    <b>Prediction:</b> {pred_mobile}<br>
+                    <b>Confidence:</b>
+                    <span style="color:#0058A3;">
+                    {conf_mobile:.2%}
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             prob_df = pd.DataFrame({
                 "Category": CLASS_NAMES,
@@ -242,22 +394,86 @@ with tab1:
                 prob_df,
                 x="Category",
                 y="Probability",
+                color="Probability",
+                color_continuous_scale=[
+                    "#FFCC00",
+                    "#0058A3"
+                ]
             )
 
-            fig.update_traces(marker_line_width=0.5)
-            fig.update_layout(height=280)
+            fig.update_coloraxes(
+                showscale=False
+            )
 
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                height=260,
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                font=dict(
+                    size=14,
+                    color="#003399"
+                ),
+                margin=dict(
+                    l=10,
+                    r=10,
+                    t=20,
+                    b=10
+                ),
+                xaxis_title="",
+                yaxis_title=""
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        # ==========================
+        # YOLO
+        # ==========================
 
         with col4:
+
             st.markdown("### YOLOv8 Detection")
 
             if detected_objects:
-                st.write(f"Detected: {', '.join(sorted(set(detected_objects)))}")
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:#F8F9FB;
+                        padding:10px;
+                        border-left:5px solid #0058A3;
+                        border-radius:8px;
+                        margin-bottom:10px;">
+                        <b>Detected:</b>
+                        {', '.join(sorted(set(detected_objects)))}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
             else:
-                st.write("No objects detected")
-            
-            st.image(annotated_image, use_container_width=True)
+
+                st.markdown(
+                    """
+                    <div style="
+                        background:#F8F9FB;
+                        padding:10px;
+                        border-left:5px solid #0058A3;
+                        border-radius:8px;
+                        margin-bottom:10px;">
+                        No objects detected
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            st.image(
+                annotated_image,
+                use_container_width=True
+            )
+
 
 # ==================================================
 # TAB 2 : DATASET
@@ -265,66 +481,119 @@ with tab1:
 
 with tab2:
 
-    st.subheader("Dataset Exploration")
+    st.subheader("Dataset Overview")
+
+    IKEA_BLUE = "#0058A3"
+    IKEA_DARK_BLUE = "#003399"
+    IKEA_YELLOW = "#FFCC00"
+
+    # ==================================================
+    # 1. SUMMARY TABLE
+    # ==================================================
+
+    summary_df = pd.DataFrame({
+        "Dataset": [
+            "IKEA Classification Dataset",
+            "YOLOv8 Detection Dataset"
+        ],
+        "Task": [
+            "Image Classification (CNN + MobileNet)",
+            "Object Detection (YOLOv8)"
+        ],
+        "Images": [
+            len(df) if not df.empty else "Unknown",
+            8055
+        ],
+        "Classes": [
+            len(CLASS_NAMES),
+            25
+        ]
+    })
+
+    st.dataframe(summary_df, use_container_width=True)
+
+    # ==================================================
+    # 2. CHART LAYOUT
+    # ==================================================
 
     col1, col2 = st.columns(2)
 
-    with col1:
-
-        counts = df["category"].value_counts().reset_index()
-        counts.columns = ["Category", "Count"]
-
-        fig = px.bar(
-            counts,
-            x="Category",
-            y="Count",
-            title="Category Distribution"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-
-        fig = px.histogram(
-            df,
-            x="price",
-            nbins=30,
-            title="Price Distribution"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    col1, col2 = st.columns(2)
+    # ==================================================
+    # IKEA CLASS DISTRIBUTION
+    # ==================================================
 
     with col1:
 
-        avg_price = df.groupby("category")["price"].mean().reset_index()
+        if not df.empty and "category" in df.columns:
 
-        fig = px.bar(
-            avg_price,
-            x="category",
-            y="price",
-            title="Average Price by Category"
-        )
+            counts = (
+                df["category"]
+                .value_counts()
+                .reindex(CLASS_NAMES)
+                .fillna(0)
+                .reset_index()
+            )
 
-        fig.update_layout(height=260)
-        st.plotly_chart(fig, use_container_width=True)
+            counts.columns = ["Category", "Count"]
+
+            fig = px.bar(
+                counts,
+                x="Category",
+                y="Count",
+                title="IKEA Dataset Class Distribution",
+                color="Count",
+                color_continuous_scale=[
+                    IKEA_YELLOW,
+                    IKEA_BLUE
+                ]
+            )
+
+            fig.update_layout(
+                height=320,
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                font=dict(color=IKEA_DARK_BLUE),
+                title_font=dict(color=IKEA_DARK_BLUE),
+                margin=dict(l=10, r=10, t=40, b=10)
+            )
+
+            fig.update_coloraxes(showscale=False)
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ==================================================
+    # YOLO DATASET SPLIT
+    # ==================================================
 
     with col2:
 
-        availability = df["sellable_online"].value_counts().reset_index()
-        availability.columns = ["Online", "Count"]
+        split_df = pd.DataFrame({
+            "Split": ["Train", "Validation", "Test"],
+            "Images": [6424, 891, 739]
+        })
 
         fig = px.pie(
-            availability,
-            names="Online",
-            values="Count",
-            title="Online Availability"
+            split_df,
+            names="Split",
+            values="Images",
+            title="YOLOv8 Dataset Split",
+            color_discrete_sequence=[
+                IKEA_BLUE,
+                IKEA_YELLOW,
+                IKEA_DARK_BLUE
+            ]
+        )
+
+        fig.update_layout(
+            height=280,
+            paper_bgcolor="white",
+            font=dict(color=IKEA_DARK_BLUE),
+            title_font=dict(color=IKEA_DARK_BLUE),
+            margin=dict(l=10, r=10, t=40, b=10)
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(df.head(20), use_container_width=True)
 
 # ==================================================
 # TAB 3 : MODELS
@@ -332,30 +601,76 @@ with tab2:
 
 with tab3:
 
-    st.subheader("Model Comparison")
+    st.subheader("Model Performance Overview")
+
+    IKEA_BLUE = "#0058A3"
+    IKEA_DARK_BLUE = "#003399"
+    IKEA_YELLOW = "#FFCC00"
+
+    # ==================================================
+    # 1. MODEL COMPARISON TABLE (UPGRADED)
+    # ==================================================
 
     comparison = pd.DataFrame({
-        "Model": ["Logistic Regression", "Custom CNN", "MobileNetV2"],
-        "Accuracy": [0.59, 0.42, 0.62]
+        "Model": [
+            "Logistic Regression",
+            "Custom CNN",
+            "MobileNetV2",
+            "YOLOv8"
+        ],
+        "Category": [
+            "Machine Learning",
+            "Deep Learning",
+            "Transfer Learning",
+            "Object Detection"
+        ],
+        "Evaluation Metric": [
+            "Accuracy",
+            "Accuracy",
+            "Accuracy",
+            "mAP50-95"
+        ],
+        "Score": [
+            0.59,
+            0.42,
+            0.62,
+            0.24   
+        ]
     })
+
+    st.dataframe(
+        comparison,
+        use_container_width=True
+    )
+
+    # ==================================================
+    # 2. SCORE COMPARISON CHART (IKEA STYLE)
+    # ==================================================
 
     fig = px.bar(
         comparison,
         x="Model",
-        y="Accuracy",
-        text="Accuracy",
-        title="Model Accuracy Comparison"
+        y="Score",
+        text="Score",
+        color="Model",
+        color_discrete_sequence=[
+            IKEA_BLUE,
+            IKEA_YELLOW,
+            IKEA_DARK_BLUE,
+            "#4C9AFF"
+        ],
+        title="Model Performance Comparison"
     )
 
-    fig.update_traces(marker_line_width=0.5)
-    fig.update_layout(height=280)
+    fig.update_layout(
+        height=420,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=IKEA_DARK_BLUE),
+        title_font=dict(color=IKEA_DARK_BLUE),
+        margin=dict(l=10, r=10, t=50, b=10),
+        xaxis_title="",
+        yaxis_title="Score"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
-
-    comparison_table = pd.DataFrame({
-        "Metric": ["Accuracy", "Validation Accuracy", "Model Type"],
-        "Custom CNN": ["0.42", "0.42", "CNN From Scratch"],
-        "MobileNetV2": ["0.62", "0.62", "Transfer Learning"]
-    })
-
-    st.dataframe(comparison_table, use_container_width=True)
