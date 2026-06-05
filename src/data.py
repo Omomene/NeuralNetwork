@@ -4,22 +4,15 @@ from sklearn.preprocessing import LabelEncoder
 
 
 def load_dataset(path):
-    """
-    Load IKEA dataset.
-    """
+    
     return pd.read_csv(path)
 
 
 def clean_dataset(df):
-    """
-    Basic cleaning.
-    """
 
-    # Remove useless index column
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns=["Unnamed: 0"])
 
-    # Numerical columns
     numeric_cols = ["price", "height", "width", "depth"]
 
     for col in numeric_cols:
@@ -27,16 +20,13 @@ def clean_dataset(df):
             df[col] = pd.to_numeric(df[col], errors="coerce")
             df[col] = df[col].fillna(df[col].median())
 
-    # Remove duplicates
     df = df.drop_duplicates()
 
     return df
 
 
 def filter_categories(df, categories):
-    """
-    Keep only selected categories.
-    """
+    
     return df[df["category"].isin(categories)].copy()
 
 
